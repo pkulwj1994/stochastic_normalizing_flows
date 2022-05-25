@@ -82,3 +82,57 @@ class BoltzmannGenerator(Energy, Sampler):
     
     def log_weights_given_latent(self, x, z, dlogp, temperature=None):
         return log_weights_given_latent(x, z, dlogp, self._prior, self._flow, self._target, temperature=None)
+    
+class SteinGenerator(Energy, Sampler):
+    
+    def __init__(self, prior, G, target):
+        """ Constructs Boltzmann Generator, i.e. normalizing flow to sample target density
+        Parameters
+        ----------
+        prior : object
+            Prior distribution implementing the energy() and sample() functions
+        flow : Flow object
+            Flow that can be evaluated forward and reverse
+        target : object
+            Prior distribution implementing the energy() function
+        """
+        super().__init__(prior.dim)
+        self._prior = prior
+        self._G = G
+        self._target = target
+        
+    @property
+    def G(self):
+        return self._G
+    
+    @property
+    def prior(self):
+        return self._prior
+        
+    def sample(self, n_samples, temperature=None, with_latent=False, with_dlogp=False, with_energy=False):
+        z = self._prior.sample(n_samples, temperature=temperature)
+        x, dlogp = self._flow(z)
+        results = [x]
+        if with_latent:
+            results.append(z)
+        if with_dlogp:
+            results.append(dlogp)
+        if with_energy:
+            energy = self._prior(z) + dlogp
+            results.append(energy)
+        if len(results) > 1:
+            return (*results,)
+        else:
+            return results[0]
+    
+    def energy(self, x, temperature=None):
+        return unormalized_nll(self._prior, self._flow, x, temperature=temperature)
+    
+    def kldiv(self, n_samples, temperature=None):
+        return unnormalized_kl_div(self._prior, self._flow, self._target, n_samples, temperature=temperature)
+    
+    def log_weights(self, x, temperature=None):
+        return log_weights(x, self._prior, self._flow, self._target, temperature=temperature)
+    
+    def log_weights_given_latent(self, x, z, dlogp, temperature=None):
+        return log_weights_given_latent(x, z, dlogp, self._prior, self._flow, self._target, temperature=None)
